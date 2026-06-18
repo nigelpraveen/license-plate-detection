@@ -1,0 +1,1865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>License Plate Detector</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+    <style>
+        /* ===== RESET & BASE ===== */
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg-primary: #060818;
+            --bg-secondary: #0d1225;
+            --bg-card: rgba(15, 23, 42, 0.7);
+            --bg-card-hover: rgba(15, 23, 42, 0.9);
+            --accent: #00d4ff;
+            --accent-secondary: #7c3aed;
+            --accent-glow: rgba(0, 212, 255, 0.15);
+            --accent-glow-2: rgba(124, 58, 237, 0.15);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(255, 255, 255, 0.2);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.06);
+            --radius: 16px;
+            --radius-sm: 10px;
+            --radius-xs: 6px;
+            --shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: 
+                radial-gradient(ellipse 80% 50% at 20% 0%, var(--accent-glow), transparent),
+                radial-gradient(ellipse 60% 40% at 80% 100%, var(--accent-glow-2), transparent),
+                var(--bg-primary);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        /* ===== NAVBAR ===== */
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(6, 8, 24, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            padding: 0 2rem;
+            height: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .navbar::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent), var(--accent-secondary), transparent);
+            opacity: 0.5;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .nav-brand-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: #fff;
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        .nav-brand-text {
+            font-size: 1.2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-brand-sub {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .nav-status {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .nav-status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--danger);
+        }
+
+        .status-dot.loaded {
+            background: var(--success);
+            box-shadow: 0 0 8px var(--success);
+            animation: pulse-dot 2s infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* ===== HERO SECTION ===== */
+        .hero {
+            text-align: center;
+            padding: 4rem 2rem 2rem;
+            position: relative;
+        }
+
+        .hero h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent) 50%, var(--accent-secondary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 1rem;
+            line-height: 1.2;
+        }
+
+        .hero p {
+            font-size: 1.15rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        /* ===== MAIN CONTAINER ===== */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem 4rem;
+        }
+
+        /* ===== SETUP NOTICE ===== */
+        .setup-notice {
+            background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(0, 212, 255, 0.1));
+            border: 1px solid var(--accent-secondary);
+            border-radius: var(--radius);
+            padding: 2rem;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .setup-notice i {
+            font-size: 2.5rem;
+            color: var(--accent-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .setup-notice h3 {
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+        }
+
+        .setup-notice p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+
+        .setup-notice code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            color: var(--accent);
+        }
+
+        /* ===== TAB NAVIGATION ===== */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            padding: 4px;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border);
+            width: fit-content;
+        }
+
+        .tab {
+            padding: 12px 28px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-family: inherit;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            border-radius: var(--radius-sm);
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tab:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .tab.active {
+            background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
+            color: #fff;
+            box-shadow: 0 4px 15px var(--accent-glow);
+        }
+
+        .tab i { font-size: 0.95rem; }
+
+        /* ===== TAB CONTENT ===== */
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.4s ease; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ===== UPLOAD AREA ===== */
+        .upload-area {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 3rem 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: var(--transition);
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-area:hover, .upload-area.dragover {
+            border-color: var(--accent);
+            background: var(--accent-glow);
+            border-color: var(--accent);
+        }
+
+        .upload-area.dragover {
+            transform: scale(1.01);
+        }
+
+        .upload-area input[type="file"] { display: none; }
+
+        .upload-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-glow), var(--accent-glow-2));
+            border: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1.5rem;
+            font-size: 2rem;
+            color: var(--accent);
+            transition: var(--transition);
+        }
+
+        .upload-area:hover .upload-icon {
+            border-color: var(--accent);
+            box-shadow: 0 0 25px var(--accent-glow);
+            transform: scale(1.1);
+        }
+
+        .upload-area h3 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        .upload-area p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .upload-area .browse-link {
+            color: var(--accent);
+            text-decoration: underline;
+            cursor: pointer;
+        }
+
+        /* ===== DETECTION WORKSPACE ===== */
+        .workspace {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        @media (max-width: 900px) {
+            .workspace { grid-template-columns: 1fr; }
+        }
+
+        .canvas-wrapper {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            overflow: hidden;
+            position: relative;
+            aspect-ratio: 16/10;
+            background: #000;
+        }
+
+        .canvas-wrapper canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            object-fit: contain;
+        }
+
+        .canvas-placeholder {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: var(--text-muted);
+        }
+
+        .canvas-placeholder i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            display: block;
+            opacity: 0.3;
+        }
+
+        /* ===== SIDEBAR ===== */
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            backdrop-filter: blur(10px);
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .panel-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-title i { color: var(--accent); font-size: 0.9rem; }
+
+        /* ===== STATS GRID ===== */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .stat-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 1rem;
+            text-align: center;
+            transition: var(--transition);
+        }
+
+        .stat-card:hover {
+            border-color: var(--border-hover);
+            background: var(--bg-card-hover);
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 0.3rem;
+        }
+
+        /* ===== DETECTION LIST ===== */
+        .detection-list {
+            max-height: 250px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) transparent;
+        }
+
+        .detection-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 0.75rem;
+            border-radius: var(--radius-xs);
+            background: var(--glass-bg);
+            border: 1px solid var(--border);
+            margin-bottom: 0.5rem;
+            transition: var(--transition);
+            animation: slideIn 0.3s ease;
+        }
+
+        .detection-item:hover {
+            border-color: var(--accent);
+            background: var(--bg-card-hover);
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .detection-badge {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            flex-shrink: 0;
+        }
+
+        .detection-info { flex: 1; min-width: 0; }
+
+        .detection-label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .detection-meta {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+
+        .detection-confidence {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--success);
+            flex-shrink: 0;
+        }
+
+        .no-detections {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: var(--text-muted);
+        }
+
+        .no-detections i {
+            font-size: 2rem;
+            margin-bottom: 0.75rem;
+            display: block;
+            opacity: 0.3;
+        }
+
+        /* ===== CONTROLS ===== */
+        .controls {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-family: inherit;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            justify-content: center;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
+            color: #fff;
+            box-shadow: 0 4px 15px var(--accent-glow);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px var(--accent-glow);
+        }
+
+        .btn-primary:active { transform: translateY(0); }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--border-hover);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--danger);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.25);
+        }
+
+        .btn-sm {
+            padding: 8px 16px;
+            font-size: 0.8rem;
+        }
+
+        /* ===== WEBCAM CONTROLS ===== */
+        .webcam-controls {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1rem;
+            justify-content: center;
+        }
+
+        .webcam-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
+            margin-top: 0.75rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .webcam-status .recording {
+            color: var(--danger);
+            animation: pulse-dot 1s infinite;
+        }
+
+        /* ===== PROCESSING OVERLAY ===== */
+        .processing-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            border-radius: var(--radius);
+        }
+
+        .processing-overlay.active { display: flex; }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ===== TOAST NOTIFICATIONS ===== */
+        .toast-container {
+            position: fixed;
+            top: 90px;
+            right: 2rem;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .toast {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 1rem 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 300px;
+            max-width: 420px;
+            box-shadow: var(--shadow);
+            animation: toastIn 0.3s ease;
+            backdrop-filter: blur(20px);
+        }
+
+        .toast.removing {
+            animation: toastOut 0.3s ease forwards;
+        }
+
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateX(50px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        @keyframes toastOut {
+            from { opacity: 1; transform: translateX(0); }
+            to { opacity: 0; transform: translateX(50px); }
+        }
+
+        .toast-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .toast-success .toast-icon { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+        .toast-error .toast-icon { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+        .toast-info .toast-icon { background: rgba(0, 212, 255, 0.15); color: var(--accent); }
+        .toast-warning .toast-icon { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+
+        .toast-content { flex: 1; }
+        .toast-title { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
+        .toast-message { font-size: 0.78rem; color: var(--text-secondary); margin-top: 2px; }
+
+        .toast-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px;
+            font-size: 0.9rem;
+        }
+
+        /* ===== INFO SECTION ===== */
+        .info-section {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+        }
+
+        .info-section h4 {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .info-section h4 i { color: var(--accent); }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+        }
+
+        .info-item {
+            text-align: center;
+            padding: 0.75rem;
+            background: var(--glass-bg);
+            border-radius: var(--radius-xs);
+            border: 1px solid var(--border);
+        }
+
+        .info-item .label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .info-item .value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-top: 4px;
+        }
+
+        /* ===== FOOTER ===== */
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            border-top: 1px solid var(--border);
+        }
+
+        footer a { color: var(--accent); text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+
+        /* ===== CONFIDENCE SLIDER ===== */
+        .slider-group {
+            margin-top: 1rem;
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .slider-label span:last-child {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            background: var(--border);
+            border-radius: 3px;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
+            cursor: pointer;
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        /* ===== MODEL LOADING SCREEN ===== */
+        .model-loading {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(6, 8, 24, 0.95);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            gap: 1.5rem;
+        }
+
+        .model-loading.active { display: flex; }
+
+        .model-loading .spinner {
+            width: 60px;
+            height: 60px;
+            border-width: 3px;
+        }
+
+        .model-loading p {
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2rem; }
+            .container { padding: 0 1rem 3rem; }
+            .navbar { padding: 0 1rem; }
+            .nav-status { display: none; }
+            .tabs { width: 100%; }
+            .tab { flex: 1; justify-content: center; padding: 10px 12px; font-size: 0.8rem; }
+            .tab span { display: none; }
+            .workspace { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Model Loading Overlay -->
+    <div class="model-loading" id="modelLoading">
+        <div class="spinner"></div>
+        <p>Loading detection model...</p>
+    </div>
+
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="nav-brand">
+            <div class="nav-brand-icon"><i class="fas fa-camera"></i></div>
+            <div>
+                <div class="nav-brand-text">License Plate Detector</div>
+                <div class="nav-brand-sub">AI-Powered Detection System</div>
+            </div>
+        </div>
+        <div class="nav-status">
+            <div class="nav-status-item">
+                <div class="status-dot" id="modelStatus"></div>
+                <span id="modelStatusText">Model Not Loaded</span>
+            </div>
+            <div class="nav-status-item">
+                <i class="fas fa-shield-halved" style="color: var(--success);"></i>
+                <span>YOLOv8</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <h1><i class="fas fa-car" style="font-size: 2.2rem;"></i> License Plate Detection</h1>
+        <p>Detect license plates from images, videos, and live webcam feeds using a custom-trained YOLOv8 deep learning model.</p>
+    </section>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Main Content -->
+    <div class="container">
+
+        <!-- Setup Notice (shown when model not loaded) -->
+        <div class="setup-notice" id="setupNotice">
+            <i class="fas fa-folder-open"></i>
+            <h3>Model Not Found</h3>
+            <p>Place your <code>best.onnx</code> model file in the <code>models/</code> directory, then reload the page.</p>
+            <p style="margin-top: 0.75rem; font-size: 0.82rem; color: var(--text-muted);">
+                <strong>Need to convert?</strong> Run this in your Colab notebook:
+                <code style="display: block; margin-top: 0.4rem; text-align: left; padding: 0.5rem; background: rgba(0,0,0,0.3); border-radius: 4px;">
+model.export(format='onnx', opset=12, simplify=True, half=False)
+                </code>
+            </p>
+        </div>
+
+        <!-- Detection Interface -->
+        <div id="detectionInterface" style="display: none;">
+
+            <!-- Tab Navigation -->
+            <div class="tabs">
+                <button class="tab active" data-tab="image" onclick="switchTab('image')">
+                    <i class="fas fa-image"></i> <span>Image</span>
+                </button>
+                <button class="tab" data-tab="video" onclick="switchTab('video')">
+                    <i class="fas fa-film"></i> <span>Video</span>
+                </button>
+                <button class="tab" data-tab="webcam" onclick="switchTab('webcam')">
+                    <i class="fas fa-video"></i> <span>Webcam</span>
+                </button>
+            </div>
+
+            <!-- ===== IMAGE TAB ===== -->
+            <div class="tab-content active" id="tab-image">
+                <div class="upload-area" id="imageDropArea" onclick="document.getElementById('imageInput').click()">
+                    <input type="file" id="imageInput" accept="image/*">
+                    <div class="upload-icon"><i class="fas fa-cloud-arrow-up"></i></div>
+                    <h3>Upload an Image</h3>
+                    <p>Drag & drop or <span class="browse-link">browse files</span></p>
+                    <p style="margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-muted);">
+                        Supports JPG, PNG, WEBP, BMP
+                    </p>
+                </div>
+            </div>
+
+            <!-- ===== VIDEO TAB ===== -->
+            <div class="tab-content" id="tab-video">
+                <div class="upload-area" id="videoDropArea" onclick="document.getElementById('videoInput').click()">
+                    <input type="file" id="videoInput" accept="video/*">
+                    <div class="upload-icon"><i class="fas fa-circle-play"></i></div>
+                    <h3>Upload a Video</h3>
+                    <p>Drag & drop or <span class="browse-link">browse files</span></p>
+                    <p style="margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-muted);">
+                        Supports MP4, WEBM, MOV
+                    </p>
+                </div>
+            </div>
+
+            <!-- ===== WEBCAM TAB ===== -->
+            <div class="tab-content" id="tab-webcam">
+                <div class="canvas-wrapper" id="webcamWrapper">
+                    <video id="webcamVideo" autoplay playsinline muted style="display:none;"></video>
+                    <canvas id="webcamCanvas"></canvas>
+                    <div class="canvas-placeholder" id="webcamPlaceholder">
+                        <i class="fas fa-video"></i>
+                        <p>Click "Start Camera" to begin live detection</p>
+                    </div>
+                    <div class="processing-overlay" id="webcamProcessing"><div class="spinner"></div></div>
+                </div>
+                <div class="webcam-controls">
+                    <button class="btn btn-primary" id="startWebcamBtn" onclick="startWebcam()">
+                        <i class="fas fa-video"></i> Start Camera
+                    </button>
+                    <button class="btn btn-danger" id="stopWebcamBtn" onclick="stopWebcam()" disabled>
+                        <i class="fas fa-stop"></i> Stop Camera
+                    </button>
+                    <button class="btn btn-secondary btn-sm" id="webcamScreenshotBtn" onclick="webcamScreenshot()" disabled style="flex: none; width: auto;">
+                        <i class="fas fa-camera"></i> Screenshot
+                    </button>
+                </div>
+                <div class="webcam-status" id="webcamStatus">
+                    <i class="fas fa-circle" style="font-size: 0.5rem;"></i> <span>Camera offline</span>
+                </div>
+            </div>
+
+            <!-- ===== WORKSPACE ===== -->
+            <div class="workspace" id="workspace" style="display: none;">
+                <!-- Canvas Area -->
+                <div class="canvas-wrapper" id="canvasWrapper">
+                    <canvas id="outputCanvas"></canvas>
+                    <div class="processing-overlay" id="processingOverlay"><div class="spinner"></div></div>
+                </div>
+
+                <!-- Sidebar -->
+                <div class="sidebar">
+                    <!-- Detection Stats -->
+                    <div class="panel">
+                        <div class="panel-header">
+                            <span class="panel-title"><i class="fas fa-chart-bar"></i> Detection Stats</span>
+                        </div>
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-value" id="detectionCount">0</div>
+                                <div class="stat-label">Plates Found</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="avgConfidence">0%</div>
+                                <div class="stat-label">Avg Confidence</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="processTime">0ms</div>
+                                <div class="stat-label">Inference</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="resolution">—</div>
+                                <div class="stat-label">Resolution</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Confidence Threshold -->
+                    <div class="panel">
+                        <div class="panel-header">
+                            <span class="panel-title"><i class="fas fa-sliders"></i> Settings</span>
+                        </div>
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Confidence Threshold</span>
+                                <span id="confValue">40%</span>
+                            </div>
+                            <input type="range" id="confSlider" min="10" max="90" value="40" oninput="document.getElementById('confValue').textContent = this.value + '%'">
+                        </div>
+                        <div class="slider-group" style="margin-top: 1rem;">
+                            <div class="slider-label">
+                                <span>NMS Threshold</span>
+                                <span id="nmsValue">45%</span>
+                            </div>
+                            <input type="range" id="nmsSlider" min="10" max="90" value="45" oninput="document.getElementById('nmsValue').textContent = this.value + '%'">
+                        </div>
+                    </div>
+
+                    <!-- Detections List -->
+                    <div class="panel" style="flex: 1;">
+                        <div class="panel-header">
+                            <span class="panel-title"><i class="fas fa-list-check"></i> Detections</span>
+                            <span style="font-size: 0.75rem; color: var(--text-muted);" id="detCount"></span>
+                        </div>
+                        <div class="detection-list" id="detectionList">
+                            <div class="no-detections" id="noDetections">
+                                <i class="fas fa-crosshairs"></i>
+                                <p>No detections yet</p>
+                                <p style="font-size: 0.8rem;">Upload or capture media to detect</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="controls" id="actionButtons" style="display: none;">
+                <button class="btn btn-secondary" onclick="downloadCanvas()" id="downloadBtn">
+                    <i class="fas fa-download"></i> Download Result
+                </button>
+                <button class="btn btn-secondary" onclick="copyToClipboard()">
+                    <i class="fas fa-copy"></i> Copy Image
+                </button>
+                <button class="btn btn-secondary" onclick="clearResults()">
+                    <i class="fas fa-trash-can"></i> Clear
+                </button>
+            </div>
+        </div>
+
+        <!-- Info Section -->
+        <div class="info-section">
+            <h4><i class="fas fa-circle-info"></i> Model Information</h4>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="label">Class</div>
+                    <div class="value">License Plate</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">Architecture</div>
+                    <div class="value">YOLOv8</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">Input Size</div>
+                    <div class="value">640×640</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">Format</div>
+                    <div class="value">ONNX</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        <p>License Plate Detector &copy; 2024 &mdash; Powered by <a href="https://github.com/ultralytics/ultralytics" target="_blank">Ultralytics YOLOv8</a> &amp; <a href="https://onnxruntime.ai/" target="_blank">ONNX Runtime Web</a></p>
+    </footer>
+
+    <script>
+    // =============================================
+    // CONFIGURATION
+    // =============================================
+    const CONFIG = {
+        MODEL_PATH: 'models/best.onnx',
+        INPUT_SIZE: 640,
+        INPUT_NAMES: ['images'],
+        OUTPUT_NAMES: ['output0'],
+        COLORS: {
+            plate: { bg: '#00d4ff', bgAlpha: 'rgba(0, 212, 255, 0.15)', text: '#00d4ff' },
+        },
+        CLASSES: ['license_plate'],
+        DEFAULT_CONF_THRESHOLD: 0.4,
+        DEFAULT_NMS_THRESHOLD: 0.45
+    };
+
+    // =============================================
+    // STATE
+    // =============================================
+    let session = null;
+    let currentTab = 'image';
+    let isWebcamActive = false;
+    let webcamAnimationId = null;
+    let videoAnimationId = null;
+    let currentSourceImage = null;
+
+    // =============================================
+    // MODEL LOADING
+    // =============================================
+    async function loadModel() {
+        const loadingScreen = document.getElementById('modelLoading');
+        const statusDot = document.getElementById('modelStatus');
+        const statusText = document.getElementById('modelStatusText');
+
+        try {
+            loadingScreen.classList.add('active');
+            console.log('[INFO] Loading ONNX model...');
+
+            session = await ort.InferenceSession.create(CONFIG.MODEL_PATH, {
+                executionProviders: ['webgl', 'wasm'],
+                graphOptimizationLevel: 'all'
+            });
+
+            console.log('[SUCCESS] Model loaded successfully!');
+            console.log('[INFO] Input names:', session.inputNames);
+            console.log('[INFO] Output names:', session.outputNames);
+
+            loadingScreen.classList.remove('active');
+            statusDot.classList.add('loaded');
+            statusText.textContent = 'Model Loaded';
+
+            document.getElementById('setupNotice').style.display = 'none';
+            document.getElementById('detectionInterface').style.display = 'block';
+
+            showToast('success', 'Model Loaded', 'License plate detection model is ready.');
+
+        } catch (error) {
+            loadingScreen.classList.remove('active');
+            statusText.textContent = 'Load Failed';
+            console.error('[ERROR] Failed to load model:', error);
+            showToast('error', 'Model Load Failed', 
+                `Could not load model. Ensure best.onnx is in the models/ directory. Error: ${error.message}`);
+        }
+    }
+
+    // =============================================
+    // TAB SWITCHING
+    // =============================================
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+
+        document.querySelector(`.tab[data-tab="${tabName}"]`).classList.add('active');
+        document.getElementById(`tab-${tabName}`).classList.add('active');
+        currentTab = tabName;
+
+        if (tabName === 'webcam' && isWebcamActive) {
+            renderWebcamFrame();
+        }
+    }
+
+    // =============================================
+    // TOAST NOTIFICATIONS
+    // =============================================
+    function showToast(type, title, message) {
+        const container = document.getElementById('toastContainer');
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+
+        const icons = { success: 'fa-check', error: 'fa-xmark', info: 'fa-info', warning: 'fa-exclamation' };
+
+        toast.innerHTML = `
+            <div class="toast-icon"><i class="fas ${icons[type] || 'fa-info'}"></i></div>
+            <div class="toast-content">
+                <div class="toast-title">${title}</div>
+                <div class="toast-message">${message}</div>
+            </div>
+            <button class="toast-close" onclick="this.parentElement.classList.add('removing'); setTimeout(() => this.parentElement.remove(), 300);">
+                <i class="fas fa-xmark"></i>
+            </button>
+        `;
+
+        container.appendChild(toast);
+
+        setTimeout(() => {
+            toast.classList.add('removing');
+            setTimeout(() => toast.remove(), 300);
+        }, 5000);
+    }
+
+    // =============================================
+    // IMAGE PREPROCESSING (Letterbox)
+    // =============================================
+    function letterboxResize(img, targetSize) {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        const imgW = img.naturalWidth || img.videoWidth || img.width;
+        const imgH = img.naturalHeight || img.videoHeight || img.height;
+
+        const scale = Math.min(targetSize / imgW, targetSize / imgH);
+        const newW = Math.round(imgW * scale);
+        const newH = Math.round(imgH * scale);
+
+        const padX = (targetSize - newW) / 2;
+        const padY = (targetSize - newH) / 2;
+
+        canvas.width = targetSize;
+        canvas.height = targetSize;
+
+        // Fill with gray (YOLO convention)
+        ctx.fillStyle = '#808080';
+        ctx.fillRect(0, 0, targetSize, targetSize);
+
+        // Draw the image centered
+        ctx.drawImage(img, padX, padY, newW, newH);
+
+        return {
+            canvas: canvas,
+            scale: scale,
+            padX: padX,
+            padY: padY,
+            originalW: imgW,
+            originalH: imgH
+        };
+    }
+
+    function imageDataToTensor(imageData, inputSize) {
+        // Create Float32Array in NCHW format
+        const data = new Float32Array(1 * 3 * inputSize * inputSize);
+        const pixels = imageData.data;
+
+        // YOLO expects RGB, normalize to [0, 1]
+        let offset = 0;
+        for (let i = 0; i < pixels.length; i += 4) {
+            data[offset] = pixels[i] / 255.0;       // R
+            data[offset + inputSize * inputSize] = pixels[i + 1] / 255.0; // G
+            data[offset + inputSize * inputSize * 2] = pixels[i + 2] / 255.0; // B
+            offset++;
+        }
+
+        return new ort.Tensor('float32', data, [1, 3, inputSize, inputSize]);
+    }
+
+    // =============================================
+    // POST-PROCESSING
+    // =============================================
+    function xywh2xyxy(box) {
+        const [cx, cy, w, h] = box;
+        return [cx - w / 2, cy - cy / 2, cx + w / 2, cy + h / 2];
+    }
+
+    function sigmoid(x) {
+        return 1 / (1 + Math.exp(-x));
+    }
+
+    function calculateIoU(box1, box2) {
+        const [x1, y1, x2, y2] = box1;
+        const [x3, y3, x4, y4] = box2;
+
+        const interX1 = Math.max(x1, x3);
+        const interY1 = Math.max(y1, y3);
+        const interX2 = Math.min(x2, x4);
+        const interY2 = Math.min(y2, y4);
+
+        const interArea = Math.max(0, interX2 - interX1) * Math.max(0, interY2 - interY1);
+        const box1Area = (x2 - x1) * (y2 - y1);
+        const box2Area = (x4 - x3) * (y4 - y3);
+
+        return interArea / (box1Area + box2Area - interArea);
+    }
+
+    function nonMaxSuppression(detections, iouThreshold) {
+        if (detections.length === 0) return [];
+
+        // Sort by confidence descending
+        detections.sort((a, b) => b.confidence - a.confidence);
+
+        const keep = [];
+        const active = new Array(detections.length).fill(true);
+
+        for (let i = 0; i < detections.length; i++) {
+            if (!active[i]) continue;
+            keep.push(detections[i]);
+
+            for (let j = i + 1; j < detections.length; j++) {
+                if (!active[j]) continue;
+
+                const iou = calculateIoU(detections[i].box, detections[j].box);
+                if (iou > iouThreshold) {
+                    active[j] = false;
+                }
+            }
+        }
+
+        return keep;
+    }
+
+    function postprocess(output, imgW, imgH, confThreshold, nmsThreshold) {
+        const numClasses = CONFIG.CLASSES.length;
+        const predictions = [];
+
+        const numDetections = output.dims[2];
+        const outputData = output.data;
+
+        for (let i = 0; i < numDetections; i++) {
+            // Extract box coordinates (cx, cy, w, h) - normalized
+            const cx = outputData[i];
+            const cy = outputData[numDetections + i];
+            const w = outputData[2 * numDetections + i];
+            const h = outputData[3 * numDetections + i];
+
+            // Extract class scores and find max
+            let maxScore = 0;
+            let maxClass = 0;
+
+            for (let c = 0; c < numClasses; c++) {
+                const score = outputData[(4 + c) * numDetections + i];
+                if (score > maxScore) {
+                    maxScore = score;
+                    maxClass = c;
+                }
+            }
+
+            const confidence = maxScore;
+
+            if (confidence < confThreshold) continue;
+
+            // Convert cx,cy,w,h to x1,y1,x2,y2
+            const x1 = cx - w / 2;
+            const y1 = cy - h / 2;
+            const x2 = cx + w / 2;
+            const y2 = cy + h / 2;
+
+            predictions.push({
+                box: [x1, y1, x2, y2],
+                confidence: confidence,
+                classId: maxClass,
+                className: CONFIG.CLASSES[maxClass] || 'unknown'
+            });
+        }
+
+        // Apply NMS
+        const nmsDetections = nonMaxSuppression(predictions, nmsThreshold);
+
+        // Scale boxes back to original image size
+        const scaleX = imgW / CONFIG.INPUT_SIZE;
+        const scaleY = imgH / CONFIG.INPUT_SIZE;
+
+        return nmsDetections.map(det => ({
+            ...det,
+            box: [
+                Math.max(0, det.box[0] * scaleX),
+                Math.max(0, det.box[1] * scaleY),
+                Math.min(imgW, det.box[2] * scaleX),
+                Math.min(imgH, det.box[3] * scaleY)
+            ]
+        }));
+    }
+
+    // =============================================
+    // DRAWING
+    // =============================================
+    function drawDetections(canvas, detections) {
+        const ctx = canvas.getContext('2d');
+
+        detections.forEach((det, index) => {
+            const [x1, y1, x2, y2] = det.box;
+            const color = CONFIG.COLORS.plate;
+            const boxW = x2 - x1;
+            const boxH = y2 - y1;
+
+            // Shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(x1 + 2, y1 + 2, boxW, boxH);
+
+            // Bounding box
+            ctx.strokeStyle = color.bg;
+            ctx.lineWidth = Math.max(2, Math.min(boxW, boxH) * 0.03);
+            ctx.strokeRect(x1, y1, boxW, boxH);
+
+            // Corner accents
+            const cornerLen = Math.min(boxW, boxH) * 0.15;
+            ctx.lineWidth = Math.max(3, Math.min(boxW, boxH) * 0.02);
+            ctx.strokeStyle = color.bg;
+            ctx.beginPath();
+            // Top-left
+            ctx.moveTo(x1, y1 + cornerLen);
+            ctx.lineTo(x1, y1);
+            ctx.lineTo(x1 + cornerLen, y1);
+            // Top-right
+            ctx.moveTo(x2 - cornerLen, y1);
+            ctx.lineTo(x2, y1);
+            ctx.lineTo(x2, y1 + cornerLen);
+            // Bottom-right
+            ctx.moveTo(x2, y2 - cornerLen);
+            ctx.lineTo(x2, y2);
+            ctx.lineTo(x2 - cornerLen, y2);
+            // Bottom-left
+            ctx.moveTo(x1 + cornerLen, y2);
+            ctx.lineTo(x1, y2);
+            ctx.lineTo(x1, y2 - cornerLen);
+            ctx.stroke();
+
+            // Label background
+            const labelText = `${det.className} ${(det.confidence * 100).toFixed(1)}%`;
+            ctx.font = `bold ${Math.max(12, boxH * 0.12)}px Inter, sans-serif`;
+            const textMetrics = ctx.measureText(labelText);
+            const labelW = textMetrics.width + 20;
+            const labelH = Math.max(24, boxH * 0.14) + 10;
+
+            ctx.fillStyle = color.bg;
+            ctx.fillRect(x1, y1 - labelH, labelW, labelH);
+
+            ctx.fillStyle = '#000';
+            ctx.globalAlpha = 0.3;
+            ctx.fillRect(x1, y1 - labelH, labelW, labelH);
+            ctx.globalAlpha = 1;
+
+            // Label text
+            ctx.fillStyle = '#fff';
+            ctx.font = `bold ${Math.max(12, boxH * 0.12)}px Inter, sans-serif`;
+            ctx.fillText(labelText, x1 + 10, y1 - labelH + labelH * 0.65);
+
+            // Index badge
+            ctx.fillStyle = color.bg;
+            ctx.beginPath();
+            ctx.arc(x2 - 12, y1 + 12, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = `bold 11px Inter, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.fillText(String(index + 1), x2 - 12, y1 + 15);
+            ctx.textAlign = 'start';
+        });
+
+        return detections;
+    }
+
+    // =============================================
+    // DETECTION PIPELINE
+    // =============================================
+    async function runDetection(sourceElement) {
+        if (!session) {
+            showToast('error', 'Model Not Loaded', 'Please ensure the model file is available.');
+            return [];
+        }
+
+        const overlay = document.getElementById('processingOverlay');
+        if (overlay) overlay.classList.add('active');
+
+        const startTime = performance.now();
+
+        try {
+            // Step 1: Letterbox resize
+            const letterbox = letterboxResize(sourceElement, CONFIG.INPUT_SIZE);
+
+            // Step 2: Get image data and convert to tensor
+            const ctx = letterbox.canvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, CONFIG.INPUT_SIZE, CONFIG.INPUT_SIZE);
+            const tensor = imageDataToTensor(imageData, CONFIG.INPUT_SIZE);
+
+            // Step 3: Run inference
+            const feeds = {};
+            feeds[session.inputNames[0]] = tensor;
+            const results = await session.run(feeds);
+            const output = results[session.outputNames[0]];
+
+            const inferenceTime = performance.now() - startTime;
+
+            // Step 4: Post-process
+            const confThreshold = parseInt(document.getElementById('confSlider').value) / 100;
+            const nmsThreshold = parseInt(document.getElementById('nmsSlider').value) / 100;
+
+            const detections = postprocess(
+                output,
+                letterbox.originalW,
+                letterbox.originalH,
+                confThreshold,
+                nmsThreshold
+            );
+
+            // Step 5: Draw results
+            const outputCanvas = document.getElementById('outputCanvas');
+            outputCanvas.width = letterbox.originalW;
+            outputCanvas.height = letterbox.originalH;
+            const outputCtx = outputCanvas.getContext('2d');
+
+            // Draw original image
+            outputCtx.drawImage(sourceElement, 0, 0, letterbox.originalW, letterbox.originalH);
+
+            // Draw detections
+            drawDetections(outputCanvas, detections);
+
+            // Update stats
+            updateStats(detections, inferenceTime, letterbox.originalW, letterbox.originalH);
+
+            // Update sidebar detection list
+            updateDetectionList(detections);
+
+            if (overlay) overlay.classList.remove('active');
+
+            if (detections.length > 0) {
+                showToast('success', `Detection Complete`, `Found ${detections.length} license plate(s).`);
+            } else {
+                showToast('info', 'No Detections', 'No license plates found in this image.');
+            }
+
+            document.getElementById('actionButtons').style.display = 'flex';
+            document.getElementById('workspace').style.display = 'grid';
+
+            return detections;
+
+        } catch (error) {
+            if (overlay) overlay.classList.remove('active');
+            console.error('[ERROR] Detection failed:', error);
+            showToast('error', 'Detection Failed', error.message);
+            return [];
+        }
+    }
+
+    // =============================================
+    // STATS & DETECTION LIST
+    // =============================================
+    function updateStats(detections, time, w, h) {
+        document.getElementById('detectionCount').textContent = detections.length;
+        document.getElementById('processTime').textContent = time.toFixed(0) + 'ms';
+        document.getElementById('resolution').textContent = `${w}×${h}`;
+
+        if (detections.length > 0) {
+            const avgConf = (detections.reduce((sum, d) => sum + d.confidence, 0) / detections.length * 100).toFixed(1);
+            document.getElementById('avgConfidence').textContent = avgConf + '%';
+        } else {
+            document.getElementById('avgConfidence').textContent = '—';
+        }
+
+        document.getElementById('detCount').textContent = `${detections.length} found`;
+    }
+
+    function updateDetectionList(detections) {
+        const list = document.getElementById('detectionList');
+
+        if (detections.length === 0) {
+            list.innerHTML = `
+                <div class="no-detections">
+                    <i class="fas fa-crosshairs"></i>
+                    <p>No license plates detected</p>
+                </div>
+            `;
+            return;
+        }
+
+        list.innerHTML = detections.map((det, i) => `
+            <div class="detection-item">
+                <div class="detection-badge"><i class="fas fa-car"></i></div>
+                <div class="detection-info">
+                    <div class="detection-label">${det.className.charAt(0).toUpperCase() + det.className.slice(1).replace('_', ' ')} #${i + 1}</div>
+                    <div class="detection-meta">
+                        Box: (${Math.round(det.box[0])}, ${Math.round(det.box[1]}) → ${Math.round(det.box[2])}, ${Math.round(det.box[3])})
+                    </div>
+                </div>
+                <div class="detection-confidence">${(det.confidence * 100).toFixed(1)}%</div>
+            </div>
+        `).join('');
+    }
+
+    // =============================================
+    // IMAGE HANDLING
+    // =============================================
+    const imageInput = document.getElementById('imageInput');
+    const imageDropArea = document.getElementById('imageDropArea');
+
+    imageInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        handleImageFile(file);
+    });
+
+    imageDropArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        imageDropArea.classList.add('dragover');
+    });
+
+    imageDropArea.addEventListener('dragleave', () => {
+        imageDropArea.classList.remove('dragover');
+    });
+
+    imageDropArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        imageDropArea.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('image/')) {
+            handleImageFile(file);
+        } else {
+            showToast('warning', 'Invalid File', 'Please drop an image file.');
+        }
+    });
+
+    function handleImageFile(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                currentSourceImage = img;
+                runDetection(img);
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // =============================================
+    // VIDEO HANDLING
+    // =============================================
+    const videoInput = document.getElementById('videoInput');
+    const videoDropArea = document.getElementById('videoDropArea');
+
+    videoInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        handleVideoFile(file);
+    });
+
+    videoDropArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        videoDropArea.classList.add('dragover');
+    });
+
+    videoDropArea.addEventListener('dragleave', () => {
+        videoDropArea.classList.remove('dragover');
+    });
+
+    videoDropArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        videoDropArea.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('video/')) {
+            handleVideoFile(file);
+        } else {
+            showToast('warning', 'Invalid File', 'Please drop a video file.');
+        }
+    });
+
+    function handleVideoFile(file) {
+        const url = URL.createObjectURL(file);
+        const video = document.createElement('video');
+        video.src = url;
+        video.muted = true;
+        video.preload = 'metadata';
+
+        video.onloadedmetadata = () => {
+            // Show first frame and start processing
+            processVideoFrame(video);
+            video.play();
+        };
+
+        video.onplay = () => {
+            processVideoContinuously(video);
+        };
+    }
+
+    function processVideoFrame(video) {
+        const canvas = document.getElementById('outputCanvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+
+        runDetection(video);
+        document.getElementById('workspace').style.display = 'grid';
+        document.getElementById('actionButtons').style.display = 'flex';
+    }
+
+    function processVideoContinuously(video) {
+        if (videoAnimationId) cancelAnimationFrame(videoAnimationId);
+
+        let lastProcessTime = 0;
+        const processInterval = 500; // Process every 500ms
+
+        function loop(timestamp) {
+            if (!video || video.paused || video.ended) return;
+
+            if (timestamp - lastProcessTime >= processInterval) {
+                processVideoFrame(video);
+                lastProcessTime = timestamp;
+            }
+
+            videoAnimationId = requestAnimationFrame(loop);
+        }
+
+        videoAnimationId = requestAnimationFrame(loop);
+    }
+
+    // =============================================
+    // WEBCAM HANDLING
+    // =============================================
+    let webcamStream = null;
+
+    async function startWebcam() {
+        try {
+            webcamStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+                audio: false
+            });
+
+            const video = document.getElementById('webcamVideo');
+            video.srcObject = webcamStream;
+            video.style.display = 'block';
+
+            await new Promise(resolve => video.onloadedmetadata = resolve);
+            video.play();
+
+            isWebcamActive = true;
+            document.getElementById('startWebcamBtn').disabled = true;
+            document.getElementById('stopWebcamBtn').disabled = false;
+            document.getElementById('webcamScreenshotBtn').disabled = false;
+            document.getElementById('webcamPlaceholder').style.display = 'none';
+            document.getElementById('webcamStatus').innerHTML = '<i class="fas fa-circle recording"></i> <span>Camera active — detecting...</span>';
+            document.getElementById('workspace').style.display = 'grid';
+
+            renderWebcamFrame();
+            showToast('success', 'Camera Active', 'Live detection is now running.');
+
+        } catch (error) {
+            console.error('[ERROR] Webcam access failed:', error);
+            showToast('error', 'Camera Error', 'Could not access the camera. Please check permissions.');
+        }
+    }
+
+    function stopWebcam() {
+        isWebcamActive = false;
+        if (webcamAnimationId) cancelAnimationFrame(webcamAnimationId);
+        if (webcamStream) {
+            webcamStream.getTracks().forEach(track => track.stop());
+            webcamStream = null;
+        }
+
+        document.getElementById('webcamVideo').srcObject = null;
+        document.getElementById('webcamVideo').style.display = 'none';
+        document.getElementById('startWebcamBtn').disabled = false;
+        document.getElementById('stopWebcamBtn').disabled = true;
+        document.getElementById('webcamScreenshotBtn').disabled = true;
+        document.getElementById('webcamPlaceholder').style.display = 'block';
+        document.getElementById('webcamStatus').innerHTML = '<i class="fas fa-circle"></i> <span>Camera offline</span>';
+
+        showToast('info', 'Camera Stopped', 'Webcam detection has been stopped.');
+    }
+
+    function renderWebcamFrame() {
+        if (!isWebcamActive) return;
+
+        const video = document.getElementById('webcamVideo');
+        if (video.readyState < 2) {
+            webcamAnimationId = requestAnimationFrame(renderWebcamFrame);
+            return;
+        }
+
+        const canvas = document.getElementById('webcamCanvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+
+        // Process every 3rd frame for performance
+        if (!webcamAnimationId || true) { // Simple approach: process each frame
+            runDetection(video).then(() => {
+                webcamAnimationId = requestAnimationFrame(renderWebcamFrame);
+            }).catch(() => {
+                webcamAnimationId = requestAnimationFrame(renderWebcamFrame);
+            });
+        } else {
+            webcamAnimationId = requestAnimationFrame(renderWebcamFrame);
+        }
+    }
+
+    function webcamScreenshot() {
+        const canvas = document.getElementById('webcamCanvas');
+        const link = document.createElement('a');
+        link.download = `license-plate-screenshot-${Date.now()}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        showToast('success', 'Screenshot Saved', 'Webcam screenshot has been downloaded.');
+    }
+
+    // =============================================
+    // UTILITY FUNCTIONS
+    // =============================================
+    function downloadCanvas() {
+        const canvas = document.getElementById('outputCanvas');
+        const link = document.createElement('a');
+        link.download = `license-plate-detection-${Date.now()}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        showToast('success', 'Downloaded', 'Detection result has been saved.');
+    }
+
+    function copyToClipboard() {
+        const canvas = document.getElementById('outputCanvas');
+        canvas.toBlob((blob) => {
+            if (navigator.clipboard && navigator.clipboard.write) {
+                navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(() => {
+                    showToast('success', 'Copied', 'Image copied to clipboard.');
+                }).catch(() => {
+                    showToast('warning', 'Copy Failed', 'Could not copy to clipboard. Try downloading instead.');
+                });
+            } else {
+                showToast('warning', 'Not Supported', 'Clipboard API not supported in this browser.');
+            }
+        });
+    }
+
+    function clearResults() {
+        const canvas = document.getElementById('outputCanvas');
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        canvas.width = 0;
+        canvas.height = 0;
+
+        document.getElementById('detectionCount').textContent = '0';
+        document.getElementById('avgConfidence').textContent = '—';
+        document.getElementById('processTime').textContent = '0ms';
+        document.getElementById('resolution').textContent = '—';
+        document.getElementById('detectionList').innerHTML = `
+            <div class="no-detections">
+                <i class="fas fa-crosshairs"></i>
+                <p>No detections yet</p>
+                <p style="font-size: 0.8rem;">Upload or capture media to detect</p>
+            </div>
+        `;
+        document.getElementById('actionButtons').style.display = 'none';
+        document.getElementById('workspace').style.display = 'none';
+
+        currentSourceImage = null;
+
+        // Reset file inputs
+        document.getElementById('imageInput').value = '';
+        document.getElementById('videoInput').value = '';
+
+        showToast('info', 'Cleared', 'Results have been cleared.');
+    }
+
+    // =============================================
+    // INITIALIZATION
+    // =============================================
+    document.addEventListener('DOMContentLoaded', () => {
+        loadModel();
+    });
+    </script>
+</body>
+</html>
